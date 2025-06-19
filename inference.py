@@ -10,9 +10,7 @@ import torch.nn.functional as F
 import torch
 import argparse
 import contextlib
-import glob
-import re
-from tqdm import tqdm
+import time
 import csv
 
 
@@ -67,6 +65,13 @@ def parse_args():
         default="./checkpoint/weights_10_acc_97.09.pth",
         help="Path to the checkpoint file",
     )
+    parser.add_argument(
+        "--len_blob",
+        type=int,
+        default=500,
+        help="the number of sample for 1 blob to classify, by default 500 for sampling rate of 16k ~31.25 ms",
+    )
+
     return parser.parse_args()
 
 
@@ -75,13 +80,12 @@ def main():
     hparams = HParams()
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # DEVICE = "cpu"
-    TEST_DIR = "ten_vad/testset"
     input_path = args.input_path
+    len_blob = args.len_blob
     print(f"input_path: {input_path}")
 
     checkpoint_path = args.checkpoint_path
     print(f"checkpoint_path: {checkpoint_path}")
-
     model = VADModel(
         dim_in=hparams.dim_in,
         d_model=hparams.d_model,
@@ -92,70 +96,67 @@ def main():
         drop_rate=0,
         activation=hparams.activation,
     ).to(DEVICE)
+
     get_parameter_number(model)
     window_size, unit_size = hparams.w, hparams.u
     with changedir():
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint["model"])
 
-    input_paths = sorted(
-        glob.glob(f"{TEST_DIR}/*.wav"), key=lambda x: int(re.search("\d+", x).group(0))
+    waveform, sr = librosa.load(input_path, sr=hparams.sample_rate)
+    waveform = waveform / np.abs(waveform).max() * 0.999
+
+    feature_input = AFPC.features(
+        waveform,
+        fs=sr,
+        nfft=hparams.n_fft,
+        winstep=hparams.winstep,
+        winlen=hparams.winlen,
+        nfilt=hparams.nfilt,
+        ncoef=hparams.ncoef,
+    )[:, :80]
+    feature_input = (feature_input - np.mean(feature_input, axis=0)) / (
+        np.std(feature_input, axis=0) + 1e-10
     )
-    out = []
-    for input_path in tqdm(input_paths):
-        waveform, sr = librosa.load(input_path, sr=hparams.sample_rate)
-        waveform = waveform / np.abs(waveform).max() * 0.999
+    feature_input = torch.as_tensor(feature_input, dtype=torch.float32)
+    feature_input = data_transform(
+        feature_input,
+        window_size,
+        unit_size,
+        feature_input.min(),
+        DEVICE=torch.device("cpu"),
+    )
+    feature_input = feature_input[window_size:-window_size, :, :]
 
-        feature_input = AFPC.features(
-            waveform,
-            fs=sr,
-            nfft=hparams.n_fft,
-            winstep=hparams.winstep,
-            winlen=hparams.winlen,
-            nfilt=hparams.nfilt,
-            ncoef=hparams.ncoef,
-        )[:, :80]
-        feature_input = (feature_input - np.mean(feature_input, axis=0)) / (
-            np.std(feature_input, axis=0) + 1e-10
+    start = time.time()
+    with torch.inference_mode():
+        train_data = feature_input.to(DEVICE)
+        postnet_output = model(train_data)
+        _, vad = bdnn_prediction(
+            F.sigmoid(postnet_output).cpu().detach().numpy(),
+            w=window_size,
+            u=unit_size,
+            threshold=0.4,
         )
-        feature_input = torch.as_tensor(feature_input, dtype=torch.float32)
-        feature_input = data_transform(
-            feature_input,
-            window_size,
-            unit_size,
-            feature_input.min(),
-            DEVICE=torch.device("cpu"),
-        )
-        feature_input = feature_input[window_size:-window_size, :, :]
-        import time
+    end = time.time()
+    lag = end - start
 
-        start = time.time()
-        with torch.inference_mode():
-            train_data = feature_input.to(DEVICE)
-            postnet_output = model(train_data)
-            _, vad = bdnn_prediction(
-                F.sigmoid(postnet_output).cpu().detach().numpy(),
-                w=window_size,
-                u=unit_size,
-                threshold=0.4,
-            )
-        end = time.time()
-        lag = end - start
+    vad = np.concatenate((np.zeros(hparams.w), vad[:, 0], np.zeros(hparams.w)))
+    vad_sample = frame2sample(
+        vad,
+        int(hparams.sample_rate * hparams.winlen),
+        int(hparams.sample_rate * hparams.winstep),
+    )
+    vad_sample = torch.tensor(vad_sample)
+    preds = [int(chunk.sum() > (len_blob / 2)) for chunk in vad_sample.split(len_blob)]
+    res = [input_path, lag, *preds]
+    header_preds = [str(elem) for elem in np.arange(len(preds))]
+    headers = ["input_path", "lag", *header_preds]
 
-        vad = np.concatenate((np.zeros(hparams.w), vad[:, 0], np.zeros(hparams.w)))
-        vad_sample = frame2sample(
-            vad,
-            int(hparams.sample_rate * hparams.winlen),
-            int(hparams.sample_rate * hparams.winstep),
-        )
-        vad_sample = torch.tensor(vad_sample)
-        preds = [int(chunk.sum() > 250) for chunk in vad_sample.split(500)]
-        out.append([input_path, lag, *preds])
-
-    with open("tr_vad_preds.csv", "w") as f:
+    with open(input_path.replace(".wav", "_tr_vad_pred.csv"), "w") as f:
         csv_writer = csv.writer(f)
-        for line in out:
-            csv_writer.writerow(line)
+        csv_writer.writerow(headers)
+        csv_writer.writerow(res)
 
 
 if __name__ == "__main__":
