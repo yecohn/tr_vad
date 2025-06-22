@@ -71,6 +71,7 @@ class VADInferrer:
         self.device = torch.device(device)
         self.window_size, self.unit_size = self.hparams.w, self.hparams.u
         self.checkpoint_path = checkpoint_path
+        self.device = device
 
         print(f"Initializing VADInferrer. Loading model from: {self.checkpoint_path}")
 
@@ -145,7 +146,7 @@ class VADInferrer:
             elif python_path_for_checkpoint and old_pythonpath is None:
                 del os.environ["PYTHONPATH"]
 
-    def infer_vad(self, audio_path, len_blob=500):
+    def infer_vad(self, audio_path, len_blob):
         """
         Performs VAD inference on a single audio file.
         Args:
