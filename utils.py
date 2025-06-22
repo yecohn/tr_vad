@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 import torch
 import numpy as np
 from pathlib import Path
-from params import HParams
+from tr_vad.params import HParams
 
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

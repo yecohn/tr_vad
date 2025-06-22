@@ -3,7 +3,7 @@ from __future__ import division
 import numpy
 from scipy.fftpack import dct
 
-from AFPC_feature import sigproc
+from tr_vad.AFPC_feature import sigproc
 
 
 def mfcc(signal, samplerate=16000, winlen=0.032, winstep=0.016, numcep=64,

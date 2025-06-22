@@ -7,9 +7,9 @@ import torch
 import torch.nn.functional as F
 import time
 import csv
-from VAD_T import VADModel
-from AFPC_feature import AFPC
-from params import HParams
+from .VAD_T import VADModel
+from .AFPC_feature import AFPC
+from .params import HParams
 from .utils import (
     bdnn_prediction,
     data_transform,
