@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 import torchaudio
-from AFPC_feature.AFPC import features
-from utils import HParams
+from tr_vad.AFPC_feature.AFPC import features
+from tr_vad.utils import HParams, RTTMProcessor
 from tqdm import tqdm
 from glob import glob
 from functools import partial
@@ -10,7 +10,6 @@ from multiprocessing import cpu_count
 from concurrent.futures import ProcessPoolExecutor
 import argparse
 import os
-from utils import RTTMProcessor
 import pickle
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -297,6 +296,6 @@ if __name__ == "__main__":
     label_dic = extract_wav_labels_from_rttm(
         rttm_file=val_path_rttm,
         wav_dir=wav_dir,
-        save_path="/home/yehoshua/.cache/huggingface/datasets/MSDWILD/preprocessed/test.pkl",
+        save_path="/home/yehoshua/.cache/huggingface/datasets/MSDWILD/preprocessed/val.pkl",
     )
     print(label_dic)

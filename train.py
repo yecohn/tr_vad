@@ -4,7 +4,7 @@ from datetime import datetime
 import torch
 from pathlib import Path
 from torch.utils.data import DataLoader
-from utils import (
+from tr_vad.utils import (
     SpeechDataset,
     train_valid_split,
     get_parameter_number,
@@ -51,7 +51,7 @@ def train_epoch(
     f1_window = ValueWindow(100)
     prec_window = ValueWindow(100)
     recall_window = ValueWindow(100)
-    best_f1 = 0
+    best_acc = 0
 
     for x, y in train_loader:
         count += 1
@@ -90,102 +90,97 @@ def train_epoch(
 
         for batch in batches:  # mini batch
             # train_data(?, 7, 80, 2), train_label(?, 7)
-            step += 1
-            if batch[1].sum() == 0:
-                continue
-            x_VAD = torch.from_numpy(batch[0]).to(DEVICE)
-            y_VAD = torch.from_numpy(batch[1]).to(DEVICE)
+            try:
+                step += 1
+                if batch[1].sum() == 0:
+                    continue
+                x_VAD = torch.from_numpy(batch[0]).to(DEVICE)
+                y_VAD = torch.from_numpy(batch[1]).to(DEVICE)
 
-            postnet_output = model(x_VAD)
-            loss, postnet_loss = loss_fn(model, y_VAD, postnet_output)
-            total_loss += loss.detach().item()
+                postnet_output = model(x_VAD)
+                loss, postnet_loss = loss_fn(model, y_VAD, postnet_output)
+                total_loss += loss.detach().item()
 
-            optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), 5, norm_type=2)
-            optimizer.step()
-            scheduler.step_update(step)
-            lr = optimizer.param_groups[0]["lr"]
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 5, norm_type=2)
+                optimizer.step()
+                scheduler.step_update(step)
+                lr = optimizer.param_groups[0]["lr"]
 
-            total_loss_window.append(loss.detach().item())
-            post_loss_window.append(postnet_loss.detach().item())
+                total_loss_window.append(loss.detach().item())
+                post_loss_window.append(postnet_loss.detach().item())
 
-            postnet_accuracy, prec, recall, f1 = prediction(y_VAD, postnet_output)
-            post_acc_window.append(float(postnet_accuracy))
-            recall_window.append(float(recall))
-            prec_window.append(float(prec))
-            f1_window.append(float(f1))
+                postnet_accuracy, prec, recall, f1 = prediction(y_VAD, postnet_output)
+                post_acc_window.append(float(postnet_accuracy))
 
-            wandb.log(
-                {
-                    "loss": loss.item(),
-                    "postnet_loss": postnet_loss.item(),
-                    "accuracy": postnet_accuracy,
-                    "learning_rate": lr,
-                    "precision": prec,
-                    "recall": recall,
-                    "f1": f1,
-                }
-            )
-
-            if step % 200 == 0:
-
-                print(f"step: {step}", f"epoch: {epoch + 1}")
-                print(
-                    f"train_loss {total_loss_window.average:.4f}",
-                    f"train_post_loss: {post_loss_window.average:.4f}",
-                    f"train_post_acc: {post_acc_window.average:.4f}",
-                    f"train_prec: {prec_window.average:.4f}",
-                    f"train_recall: {recall_window.average:.4f}",
-                    f"train_f1: {f1_window.average:.4f}",
-                    sep="\t",
+                wandb.log(
+                    {
+                        "loss": loss.item(),
+                        "postnet_loss": postnet_loss.item(),
+                        "accuracy": postnet_accuracy,
+                        "learning_rate": lr,
+                    }
                 )
 
-            if step % 1000 == 0:
-                with torch.inference_mode():
-                    test_loss, test_acc, test_precision, test_recall, test_f1 = (
-                        test_epoch(model, test_loader, loss_fn)
-                    )
-                    if test_f1 > best_f1:
-                        checkpoint = {
-                            "model": model.state_dict(),
-                            "optimizer": optimizer.state_dict(),
-                            "epoch": epoch,
-                            "step": step,
-                            "scheduler": scheduler.state_dict(),
-                        }
-                        if not os.path.isdir("./checkpoint"):
-                            os.mkdir("./checkpoint")
-                        checkpoint_name = "./checkpoint/wsd_weights_%s_%s.pth" % (
-                            str(epoch + 1),
-                            str(step),
-                        )
-                        best_f1 = test_f1
-
-                        torch.save(checkpoint, checkpoint_name)
-                        RED = "\033[91m"
-                        RESET = "\033[0m"
-                        print(f"{RED}checkpoint {checkpoint_name} saved{RESET}")
-                    torch.cuda.empty_cache()
+                if step % 200 == 0:
 
                     print(f"step: {step}", f"epoch: {epoch + 1}")
-                    print(
-                        f"val_loss {test_loss:.4f}",
-                        f"val_post_acc: {test_acc:.4f}",
-                        f"val_prec: {test_precision:.4f}",
-                        f"val_recall: {test_recall:.4f}",
-                        f"val_f1: {test_f1:.4f}",
-                        sep="\t",
-                    )
                     print(
                         f"train_loss {total_loss_window.average:.4f}",
                         f"train_post_loss: {post_loss_window.average:.4f}",
                         f"train_post_acc: {post_acc_window.average:.4f}",
-                        f"train_prec: {prec_window.average:.4f}",
-                        f"train_recall: {recall_window.average:.4f}",
-                        f"train_f1: {f1_window.average:.4f}",
                         sep="\t",
                     )
+
+                if step % 10_000 == 0:
+                    with torch.inference_mode():
+                        test_loss, test_acc, test_precision, test_recall, test_f1 = (
+                            test_epoch(model, test_loader, loss_fn)
+                        )
+                        if test_acc > best_acc:
+                            checkpoint = {
+                                "model": model.state_dict(),
+                                "optimizer": optimizer.state_dict(),
+                                "epoch": epoch,
+                                "step": step,
+                                "scheduler": scheduler.state_dict(),
+                            }
+                            if not os.path.isdir("./checkpoint"):
+                                os.mkdir("./checkpoint")
+                            checkpoint_name = "./checkpoint/wsd_weights_%s_%s.pth" % (
+                                str(epoch + 1),
+                                str(step),
+                            )
+                            best_f1 = test_f1
+
+                            torch.save(checkpoint, checkpoint_name)
+                            RED = "\033[91m"
+                            RESET = "\033[0m"
+                            print(f"{RED}checkpoint {checkpoint_name} saved{RESET}")
+                        torch.cuda.empty_cache()
+
+                        print(f"step: {step}", f"epoch: {epoch + 1}")
+                        print(
+                            f"val_loss {test_loss:.4f}",
+                            f"val_post_acc: {test_acc:.4f}",
+                            f"val_prec: {test_precision:.4f}",
+                            f"val_recall: {test_recall:.4f}",
+                            f"val_f1: {test_f1:.4f}",
+                            sep="\t",
+                        )
+                        print(
+                            f"train_loss {total_loss_window.average:.4f}",
+                            f"train_post_loss: {post_loss_window.average:.4f}",
+                            f"train_post_acc: {post_acc_window.average:.4f}",
+                            f"train_prec: {prec_window.average:.4f}",
+                            f"train_recall: {recall_window.average:.4f}",
+                            f"train_f1: {f1_window.average:.4f}",
+                            sep="\t",
+                        )
+            except torch.OutOfMemoryError:
+                print("this sample is too large it is not taking for training")
+                continue
 
         del batches, examples
         examples = []
@@ -237,18 +232,24 @@ def test_epoch(model, test_loader, loss_fn):
             )
 
         for batch in batches:  # mini batch
-            count += 1
-            x_VAD = torch.from_numpy(batch[0]).to(DEVICE)
-            y_VAD = torch.from_numpy(batch[1]).to(DEVICE)
+            try:
+                count += 1
+                x_VAD = torch.from_numpy(batch[0]).to(DEVICE)
+                y_VAD = torch.from_numpy(batch[1]).to(DEVICE)
 
-            postnet_output = model(x_VAD)
-            postnet_accuracy, precision, recall, f1 = prediction(y_VAD, postnet_output)
-            post_acc += float(postnet_accuracy)
-            prec += precision
-            rec += recall
-            f += f1
-            loss, _ = loss_fn(model, y_VAD, postnet_output)
-            total_loss += loss.detach().item()
+                postnet_output = model(x_VAD)
+                postnet_accuracy, precision, recall, f1 = prediction(
+                    y_VAD, postnet_output
+                )
+                post_acc += float(postnet_accuracy)
+                prec += precision
+                rec += recall
+                f += f1
+                loss, _ = loss_fn(model, y_VAD, postnet_output)
+                total_loss += loss.detach().item()
+            except torch.OutOfMemoryError:
+                print("this test sample is causing memory error, it is not computed")
+                continue
 
         torch.cuda.empty_cache()
 
@@ -369,7 +370,7 @@ def parse_args():
         "--checkpoint_path",
         type=str,
         # default="./checkpoint/weights_10_acc_97.09.pth",
-        default="/home/yehoshua/projects/vad/tr_vad/checkpoint/weights_10_acc_97.09.pth",
+        default="./checkpoint/wsd_weights_1_9000.pth",
         help="Path to the checkpoint file, if `resume_train` is set, then resume training from the checkpoint",
     )
     return parser.parse_args()

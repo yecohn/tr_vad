@@ -1,5 +1,4 @@
-from preprocess import extract_timestamps_rttm, binarize_labels, sample2frame
-import numpy as np
+from tr_vad.preprocess import binarize_labels
 
 
 def test_read_rttm(rttm, wav_id):
@@ -10,22 +9,21 @@ def test_audio(wav):
     wav
 
 
-def test_extract_timestamps_rttm(rttm_file, wav_id):
-    timestamps = extract_timestamps_rttm(rttm_file, wav_id)
-    assert type(timestamps == list)
-    assert len(timestamps) > 0
-
-
-def test_binarize_labels(timestamps, sr, wav):
+def test_binarize_labels(timestamps, sr, wav, label):
     labels = binarize_labels(timestamps, sr, wav)
     first_start_sample = int(timestamps[0]["start"] * sr)
     first_end_sample = int(timestamps[0]["end"] * sr)
+    breakpoint()
     assert len(labels) == len(wav)
     assert (
         labels[first_start_sample:first_end_sample].sum()
         == first_end_sample - first_start_sample
     )
-    assert labels[first_end_sample + 1] == 0
+    assert labels == label
+
+
+def test_labels(labels):
+    print(labels)
 
 
 # def test_sample2frame(feature_map, wav):
