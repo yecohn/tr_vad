@@ -1,11 +1,11 @@
 import librosa
 import os
 import matplotlib.pyplot as plt
-from utils import bdnn_prediction, get_parameter_number, data_transform
-from params import HParams
-from VAD_T import VADModel
+from tr_vad.utils import bdnn_prediction, get_parameter_number, data_transform
+from tr_vad.params import HParams
+from tr_vad.VAD_T import VADModel
 import numpy as np
-from AFPC_feature import AFPC
+from tr_vad.AFPC_feature import AFPC
 import torch.nn.functional as F
 import torch
 import argparse
@@ -62,7 +62,7 @@ def parse_args():
     parser.add_argument(
         "--checkpoint_path",
         type=str,
-        default="./checkpoint/weights_10_acc_97.09.pth",
+        default="./tr_vad/checkpoint/weights_10_acc_97.09.pth",
         help="Path to the checkpoint file",
     )
     parser.add_argument(

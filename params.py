@@ -25,7 +25,7 @@ class HParams:
         self.drop_rate = 0.15
         self.activation = torch.nn.GELU()
         self.batch_size = 512
-        self.epochs = 10
+        self.epochs = 2
 
         self.lr = 1e-3
         self.warmup_lr_init = 5e-7

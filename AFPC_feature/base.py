@@ -6,9 +6,21 @@ from scipy.fftpack import dct
 from tr_vad.AFPC_feature import sigproc
 
 
-def mfcc(signal, samplerate=16000, winlen=0.032, winstep=0.016, numcep=64,
-         nfilt=64, nfft=512, lowfreq=80, highfreq=8000, preemph=0.97, ceplifter=22, appendEnergy=False,
-         winfunc=lambda x: numpy.ones((x,))):
+def mfcc(
+    signal,
+    samplerate=16000,
+    winlen=0.032,
+    winstep=0.016,
+    numcep=64,
+    nfilt=64,
+    nfft=512,
+    lowfreq=80,
+    highfreq=8000,
+    preemph=0.97,
+    ceplifter=22,
+    appendEnergy=False,
+    winfunc=lambda x: numpy.ones((x,)),
+):
     """Compute MFCC features from an audio signal.
 
     :param signal: the audio signal from which to compute features. Should be an N*1 array
@@ -27,19 +39,42 @@ def mfcc(signal, samplerate=16000, winlen=0.032, winstep=0.016, numcep=64,
     :returns: A numpy array of size (NUMFRAMES by numcep) containing features. Each row holds 1 feature vector.
     """
     winfunc = numpy.hanning
-    feat, energy = fbank(signal, samplerate, winlen, winstep, nfilt, nfft, lowfreq, highfreq, preemph, winfunc)
+    feat, energy = fbank(
+        signal,
+        samplerate,
+        winlen,
+        winstep,
+        nfilt,
+        nfft,
+        lowfreq,
+        highfreq,
+        preemph,
+        winfunc,
+    )
     # feat = fbank(signal, samplerate, winlen, winstep, nfilt, nfft, lowfreq, highfreq, preemph, winfunc)
 
     feat = numpy.log(feat)
-    feat = dct(feat, type=2, axis=1, norm='ortho')[:, :numcep]
+    feat = dct(feat, type=2, axis=1, norm="ortho")[:, :numcep]
     feat = lifter(feat, ceplifter)
-    if appendEnergy: feat[:, 0] = numpy.log(energy)  # replace first cepstral coefficient with log of frame energy
+    if appendEnergy:
+        feat[:, 0] = numpy.log(
+            energy
+        )  # replace first cepstral coefficient with log of frame energy
     return feat
 
 
-def fbank(signal, samplerate=16000, winlen=0.032, winstep=0.016,
-          nfilt=64, nfft=512, lowfreq=0, highfreq=None, preemph=0.97,
-          winfunc=lambda x: numpy.ones((x,))):
+def fbank(
+    signal,
+    samplerate=16000,
+    winlen=0.032,
+    winstep=0.016,
+    nfilt=64,
+    nfft=512,
+    lowfreq=0,
+    highfreq=None,
+    preemph=0.97,
+    winfunc=lambda x: numpy.ones((x,)),
+):
     """Compute Mel-filterbank energy features from an audio signal.
 
     :param signal: the audio signal from which to compute features. Should be an N*1 array
@@ -57,22 +92,40 @@ def fbank(signal, samplerate=16000, winlen=0.032, winstep=0.016,
     """
     highfreq = highfreq or samplerate / 2
     signal = sigproc.preemphasis(signal, preemph)
-    pspec = sigproc.powspec(signal, fs=samplerate, nseg=int(winlen * samplerate), novl=int(winstep * samplerate),
-                            nfft=nfft)
+    pspec = sigproc.powspec(
+        signal,
+        fs=samplerate,
+        nseg=int(winlen * samplerate),
+        novl=int(winstep * samplerate),
+        nfft=nfft,
+    )
     energy = numpy.sum(pspec, 1)  # this stores the total energy in each frame
-    energy = numpy.where(energy == 0, numpy.finfo(float).eps, energy)  # if energy is zero, we get problems with log
+    energy = numpy.where(
+        energy == 0, numpy.finfo(float).eps, energy
+    )  # if energy is zero, we get problems with log
 
     fb = get_filterbanks(nfilt, nfft, samplerate, lowfreq, highfreq)
     feat = numpy.dot(pspec, fb.T)  # compute the filterbank energies
-    feat = numpy.where(feat == 0, numpy.finfo(float).eps, feat)  # if feat is zero, we get problems with log
+    feat = numpy.where(
+        feat == 0, numpy.finfo(float).eps, feat
+    )  # if feat is zero, we get problems with log
 
     return feat, energy
     # return feat
 
 
-def logfbank(signal, samplerate=16000, winlen=0.032, winstep=0.016,
-             nfilt=64, nfft=512, lowfreq=0, highfreq=None, preemph=0.97,
-             winfunc=lambda x: numpy.ones((x,))):
+def logfbank(
+    signal,
+    samplerate=16000,
+    winlen=0.032,
+    winstep=0.016,
+    nfilt=64,
+    nfft=512,
+    lowfreq=0,
+    highfreq=None,
+    preemph=0.97,
+    winfunc=lambda x: numpy.ones((x,)),
+):
     """Compute log Mel-filterbank energy features from an audio signal.
 
     :param signal: the audio signal from which to compute features. Should be an N*1 array
@@ -87,14 +140,34 @@ def logfbank(signal, samplerate=16000, winlen=0.032, winstep=0.016,
     :param winfunc: the analysis window to apply to each frame. By default no window is applied. You can use numpy window functions here e.g. winfunc=numpy.hamming
     :returns: A numpy array of size (NUMFRAMES by nfilt) containing features. Each row holds 1 feature vector.
     """
-    feat, energy = fbank(signal, samplerate, winlen, winstep, nfilt, nfft, lowfreq, highfreq, preemph, winfunc)
+    feat, energy = fbank(
+        signal,
+        samplerate,
+        winlen,
+        winstep,
+        nfilt,
+        nfft,
+        lowfreq,
+        highfreq,
+        preemph,
+        winfunc,
+    )
     # feat = fbank(signal, samplerate, winlen, winstep, nfilt, nfft, lowfreq, highfreq, preemph, winfunc)
     return numpy.log(feat)
 
 
-def ssc(signal, samplerate=16000, winlen=0.032, winstep=0.016,
-        nfilt=64, nfft=512, lowfreq=0, highfreq=None, preemph=0.97,
-        winfunc=lambda x: numpy.ones((x,))):
+def ssc(
+    signal,
+    samplerate=16000,
+    winlen=0.032,
+    winstep=0.016,
+    nfilt=64,
+    nfft=512,
+    lowfreq=0,
+    highfreq=None,
+    preemph=0.97,
+    winfunc=lambda x: numpy.ones((x,)),
+):
     """Compute Spectral Subband Centroid features from an audio signal.
 
     :param signal: the audio signal from which to compute features. Should be an N*1 array
@@ -112,20 +185,39 @@ def ssc(signal, samplerate=16000, winlen=0.032, winstep=0.016,
     winfunc = numpy.hanning
     highfreq = highfreq or samplerate / 2
     signal = sigproc.preemphasis(signal, preemph)
-    pspec = sigproc.powspec(signal, fs=samplerate, nseg=int(winlen * samplerate), novl=int(winstep * samplerate),
-                            nfft=nfft)
-    pspec = numpy.where(pspec == 0, numpy.finfo(float).eps, pspec)  # if things are all zeros we get problems
+    pspec = sigproc.powspec(
+        signal,
+        fs=samplerate,
+        nseg=int(winlen * samplerate),
+        novl=int(winstep * samplerate),
+        nfft=nfft,
+    )
+    pspec = numpy.where(
+        pspec == 0, numpy.finfo(float).eps, pspec
+    )  # if things are all zeros we get problems
 
     fb = get_filterbanks(nfilt, nfft, samplerate, lowfreq, highfreq)
     feat = numpy.dot(pspec, fb.T)  # compute the filterbank energies
-    R = numpy.tile(numpy.linspace(1, samplerate / 2, numpy.size(pspec, 1)), (numpy.size(pspec, 0), 1))
+    R = numpy.tile(
+        numpy.linspace(1, samplerate / 2, numpy.size(pspec, 1)),
+        (numpy.size(pspec, 0), 1),
+    )
 
     return numpy.dot(pspec * R, fb.T) / feat
 
 
-def sep(signal, samplerate=16000, winlen=0.032, winstep=0.016,
-        nfilt=64, nfft=512, lowfreq=0, highfreq=None, preemph=0.97,
-        winfunc=lambda x: numpy.ones((x,))):
+def sep(
+    signal,
+    samplerate=16000,
+    winlen=0.032,
+    winstep=0.016,
+    nfilt=64,
+    nfft=512,
+    lowfreq=0,
+    highfreq=None,
+    preemph=0.97,
+    winfunc=lambda x: numpy.ones((x,)),
+):
     """Compute Spectral Subband Centroid features from an audio signal.
 
     :param signal: the audio signal from which to compute features. Should be an N*1 array
@@ -143,15 +235,24 @@ def sep(signal, samplerate=16000, winlen=0.032, winstep=0.016,
     winfunc = numpy.hanning
     highfreq = highfreq or samplerate / 2
     signal = sigproc.preemphasis(signal, preemph)
-    pspec = sigproc.powspec(signal, fs=samplerate, nseg=int(winlen * samplerate), novl=int(winstep * samplerate),
-                            nfft=nfft)
-    pspec = numpy.where(pspec == 0, numpy.finfo(float).eps, pspec)  # if things are all zeros we get problems
+    pspec = sigproc.powspec(
+        signal,
+        fs=samplerate,
+        nseg=int(winlen * samplerate),
+        novl=int(winstep * samplerate),
+        nfft=nfft,
+    )
+    pspec = numpy.where(
+        pspec == 0, numpy.finfo(float).eps, pspec
+    )  # if things are all zeros we get problems
 
     fb = get_filterbanks(nfilt, nfft, samplerate, lowfreq, highfreq)
     interv = fb > 0
     feat = numpy.zeros((numpy.shape(pspec)[0], nfilt))
     for i in range(numpy.shape(pspec)[0]):
-        feat[i] = numpy.argmax(numpy.multiply(pspec[i, :], interv), axis=1).T  # compute the filterbank energies
+        feat[i] = numpy.argmax(
+            numpy.multiply(pspec[i, :], interv), axis=1
+        ).T  # compute the filterbank energies
     # R = numpy.tile(numpy.linspace(1,samplerate/2,numpy.size(pspec,1)),(numpy.size(pspec,0),1))
 
     return feat / nfft * samplerate
@@ -171,7 +272,7 @@ def hz2mel(hz):
     :param hz: a value in Hz. This can also be a numpy array, conversion proceeds element-wise.
     :returns: a value in Mels. If an array was passed in, an identical sized array is returned.
     """
-    return 2595 * numpy.log10(1 + hz / 700.)
+    return 2595 * numpy.log10(1 + hz / 700.0)
 
 
 def mel2hz(mel):
@@ -249,7 +350,7 @@ def lifter(cepstra, L=22):
     if L > 0:
         nframes, ncoeff = numpy.shape(cepstra)
         n = numpy.arange(ncoeff)
-        lift = 1 + (L / 2.) * numpy.sin(numpy.pi * n / L)
+        lift = 1 + (L / 2.0) * numpy.sin(numpy.pi * n / L)
         return lift * cepstra
     else:
         # values of L <= 0, do nothing
@@ -264,22 +365,25 @@ def delta(feat, N):
     :returns: A numpy array of size (NUMFRAMES by number of features) containing delta features. Each row holds 1 delta feature vector.
     """
     if N < 1:
-        raise ValueError('N must be an integer >= 1')
+        raise ValueError("N must be an integer >= 1")
     NUMFRAMES = len(feat)
-    denominator = 2 * sum([i ** 2 for i in range(1, N + 1)])
+    denominator = 2 * sum([i**2 for i in range(1, N + 1)])
     delta_feat = numpy.empty_like(feat)
-    padded = numpy.pad(feat, ((N, N), (0, 0)), mode='edge')  # padded version of feat
+    padded = numpy.pad(feat, ((N, N), (0, 0)), mode="edge")  # padded version of feat
     for t in range(NUMFRAMES):
-        delta_feat[t] = numpy.dot(numpy.arange(-N, N + 1),
-                                  padded[t: t + 2 * N + 1]) / denominator  # [t : t+2*N+1] == [(N+t)-N : (N+t)+N+1]
+        delta_feat[t] = (
+            numpy.dot(numpy.arange(-N, N + 1), padded[t : t + 2 * N + 1]) / denominator
+        )  # [t : t+2*N+1] == [(N+t)-N : (N+t)+N+1]
     return delta_feat
 
 
 def feature_construction(mat, n_frames):
-    """adds the lagging time frames to the feature set.
-    """
-    # n_frames: should be odd 
+    """adds the lagging time frames to the feature set."""
+    # n_frames: should be odd
     mat_ftr = numpy.zeros((numpy.shape(mat)[0], 0))
-    for i in range(numpy.int16(numpy.ceil(-n_frames / 2)), numpy.int16(numpy.floor(n_frames / 2)) + 1):
+    for i in range(
+        numpy.int16(numpy.ceil(-n_frames / 2)),
+        numpy.int16(numpy.floor(n_frames / 2)) + 1,
+    ):
         mat_ftr = numpy.concatenate((mat_ftr, numpy.roll(mat, i, axis=0)), axis=1)
     return mat_ftr

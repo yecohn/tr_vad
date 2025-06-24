@@ -1,6 +1,17 @@
 import numpy as np
+import torchaudio
+import torch
+from tr_vad.utils import HParams
 
 from tr_vad.AFPC_feature import base
+
+hparams = HParams()
+FS = hparams.sample_rate
+NFFT = hparams.n_fft
+WINSTEP = hparams.winstep
+WINLEN = hparams.winlen
+NFILT = hparams.nfilt
+NCOEF = hparams.ncoef
 
 
 def features(
@@ -52,3 +63,19 @@ def features(
     # AFPCS
     AFPC = np.concatenate((mfcc_pac, nssc_pac), axis=1).astype("float32")
     return AFPC
+
+
+if __name__ == "__main__":
+
+    wav_path = "/home/yehoshua/projects/vad/data/en_example.wav"
+    wav, sr = torchaudio.load(wav_path)
+    wav = wav[0]
+    # start += int(silence * FS)
+    # end += int(silence * FS)
+
+    # rescale wav
+    wav = wav / torch.abs(wav).max() * 0.999
+    out = wav.detach().numpy()
+    feature_input = features(
+        out, fs=FS, nfft=NFFT, winstep=WINSTEP, winlen=WINLEN, nfilt=NFILT, ncoef=NCOEF
+    )[:, :80]

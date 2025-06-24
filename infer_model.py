@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 import time
 import csv
+from torchaudio import load
 from .VAD_T import VADModel
 from .AFPC_feature import AFPC
 from .params import HParams
@@ -146,7 +147,62 @@ class VADInferrer:
             elif python_path_for_checkpoint and old_pythonpath is None:
                 del os.environ["PYTHONPATH"]
 
-    def infer_vad(self, audio_path, len_blob):
+    def infer_feature(self, feature, len_blob=500):
+        feature_input = feature[:, :80]
+
+        feature_input = (feature_input - np.mean(feature_input, axis=0)) / (
+            np.std(feature_input, axis=0) + 1e-10
+        )
+        feature_input = torch.as_tensor(feature_input, dtype=torch.float32)
+        feature_input = data_transform(
+            feature_input,
+            self.window_size,
+            self.unit_size,
+            feature_input.min(),
+            DEVICE=torch.device("cpu"),  # Data transform might run on CPU first
+        )
+        # feature_input = feature_input[self.window_size : -self.window_size, :, :]
+
+        start_time = time.time()
+        with torch.inference_mode():
+            train_data = feature_input.to(self.device)
+            try:
+                postnet_output = self.model(train_data)
+            except torch.OutOfMemoryError:
+                # print(f"too much on cuda pass sample {audio_path}")
+                return 0, 0
+            _, vad_frame_level = bdnn_prediction(
+                F.sigmoid(postnet_output).cpu().detach().numpy(),
+                w=self.window_size,
+                u=self.unit_size,
+                threshold=0.4,
+            )
+        end_time = time.time()
+        lag = end_time - start_time
+
+        # Post-processing to sample-level
+        # The concatenation of zeros (hparams.w) seems to compensate for windowing
+        vad_frame_level = np.concatenate(
+            (np.zeros(self.hparams.w), vad_frame_level[:, 0], np.zeros(self.hparams.w))
+        )
+
+        vad_sample_level = frame2sample(
+            vad_frame_level,
+            int(self.hparams.sample_rate * self.hparams.winlen),
+            int(self.hparams.sample_rate * self.hparams.winstep),
+        )
+        vad_sample_level = torch.tensor(vad_sample_level)
+
+        # Blob-level prediction
+        # Sum of '1's in a blob > half of blob length implies speech
+        preds_blob_level = [
+            int(chunk.sum() > (len_blob / 2))
+            for chunk in vad_sample_level.split(len_blob)
+        ]
+
+        return preds_blob_level, lag
+
+    def infer_vad(self, audio_path, len_blob=500):
         """
         Performs VAD inference on a single audio file.
         Args:
@@ -158,8 +214,9 @@ class VADInferrer:
         """
         print(f"Processing audio: {audio_path}")
 
-        waveform, sr = librosa.load(audio_path, sr=self.hparams.sample_rate)
-        waveform = waveform / np.abs(waveform).max() * 0.999  # Normalize
+        # waveform, sr = librosa.load(audio_path, sr=self.hparams.sample_rate)
+        waveform, sr = load(audio_path)  # debug loading non normalize
+        # waveform = waveform / np.abs(waveform).max() * 0.999  # Normalize
 
         feature_input = AFPC.features(
             waveform,
@@ -185,7 +242,7 @@ class VADInferrer:
             feature_input.min(),
             DEVICE=torch.device("cpu"),  # Data transform might run on CPU first
         )
-        feature_input = feature_input[self.window_size : -self.window_size, :, :]
+        # feature_input = feature_input[self.window_size : -self.window_size, :, :]
 
         start_time = time.time()
         with torch.inference_mode():

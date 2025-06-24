@@ -5,9 +5,10 @@ import torch
 from einops import rearrange
 import torch.nn.functional as F
 
-from .params import HParams
+from tr_vad.params import HParams
 import numpy as np
 import math
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 
 hparamas = HParams()
@@ -296,6 +297,17 @@ def add_loss(model, targets, post_out):
 
 def prediction(targets, post_out, w=hparamas.w, u=hparamas.u):
     post_prediction = torch.round(F.sigmoid(post_out))
+    f1 = f1_score(
+        targets.cpu().numpy().flatten(),
+        post_prediction.detach().cpu().numpy().flatten(),
+    )
+    precision = precision_score(
+        targets.cpu().numpy().flatten(),
+        post_prediction.detach().cpu().numpy().flatten(),
+    )
+    recall = recall_score(
+        targets.cpu().numpy().flatten(),
+        post_prediction.detach().cpu().numpy().flatten(),
+    )
     post_acc = torch.mean(post_prediction.eq_(targets))
-
-    return post_acc
+    return post_acc, precision, recall, f1
