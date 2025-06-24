@@ -296,18 +296,28 @@ def add_loss(model, targets, post_out):
 
 
 def prediction(targets, post_out, w=hparamas.w, u=hparamas.u):
+    targets_numpy = targets.cpu().numpy()
     post_prediction = torch.round(F.sigmoid(post_out))
+    post_prediction_numpy = post_prediction.detach().cpu().numpy()
+    aggregate_targets = np.where(
+        np.sum(targets_numpy, axis=1) / targets_numpy.shape[1] > 0.5, 1, 0
+    )
+    aggregate_preds = np.where(
+        np.sum(post_prediction_numpy, axis=1) / post_prediction_numpy.shape[1] > 0.5,
+        1,
+        0,
+    )
     f1 = f1_score(
-        targets.cpu().numpy().flatten(),
-        post_prediction.detach().cpu().numpy().flatten(),
+        aggregate_targets,
+        aggregate_preds,
     )
     precision = precision_score(
-        targets.cpu().numpy().flatten(),
-        post_prediction.detach().cpu().numpy().flatten(),
+        aggregate_targets,
+        aggregate_preds,
     )
     recall = recall_score(
-        targets.cpu().numpy().flatten(),
-        post_prediction.detach().cpu().numpy().flatten(),
+        aggregate_targets,
+        aggregate_preds,
     )
     post_acc = torch.mean(post_prediction.eq_(targets))
     return post_acc, precision, recall, f1

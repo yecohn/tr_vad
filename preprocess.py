@@ -288,10 +288,15 @@ if __name__ == "__main__":
     val_path_rttm = (
         "/home/yehoshua/.cache/huggingface/datasets/MSDWILD/rttms/few.val.rttm"
     )
+
+    test_path_rttm = (
+        "/home/yehoshua/.cache/huggingface/datasets/MSDWILD/rttms/many.val.rttm"
+    )
+
     wav_dir = "/home/yehoshua/.cache/huggingface/datasets/MSDWILD/wav"
     label_dic = extract_wav_labels_from_rttm(
         rttm_file=val_path_rttm,
         wav_dir=wav_dir,
-        save_path="/home/yehoshua/.cache/huggingface/datasets/MSDWILD/preprocessed/val.pkl",
+        save_path="/home/yehoshua/.cache/huggingface/datasets/MSDWILD/preprocessed/test.pkl",
     )
     print(label_dic)

@@ -216,7 +216,7 @@ class VADInferrer:
 
         # waveform, sr = librosa.load(audio_path, sr=self.hparams.sample_rate)
         waveform, sr = load(audio_path)  # debug loading non normalize
-        # waveform = waveform / np.abs(waveform).max() * 0.999  # Normalize
+        waveform = waveform / np.abs(waveform).max() * 0.999  # Normalize
 
         feature_input = AFPC.features(
             waveform,

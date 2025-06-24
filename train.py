@@ -22,7 +22,7 @@ import argparse
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    
+
 train_on_gpu = torch.cuda.is_available()
 
 if train_on_gpu:
@@ -128,15 +128,23 @@ def train_epoch(
                 }
             )
 
+            if step % 200 == 0:
+
+                print(f"step: {step}", f"epoch: {epoch + 1}")
+                print(
+                    f"train_loss {total_loss_window.average:.4f}",
+                    f"train_post_loss: {post_loss_window.average:.4f}",
+                    f"train_post_acc: {post_acc_window.average:.4f}",
+                    f"train_prec: {prec_window.average:.4f}",
+                    f"train_recall: {recall_window.average:.4f}",
+                    f"train_f1: {f1_window.average:.4f}",
+                    sep="\t",
+                )
+
             if step % 1000 == 0:
                 with torch.inference_mode():
                     test_loss, test_acc, test_precision, test_recall, test_f1 = (
                         test_epoch(model, test_loader, loss_fn)
-                    )
-                    print(
-                        "{} save checkpoint.".format(
-                            datetime.now().strftime(_format)[:-3]
-                        )
                     )
                     if test_f1 > best_f1:
                         checkpoint = {
@@ -155,10 +163,12 @@ def train_epoch(
                         best_f1 = test_f1
 
                         torch.save(checkpoint, checkpoint_name)
-                        print(f"checkpoint {checkpoint_name} saved")
+                        RED = "\033[91m"
+                        RESET = "\033[0m"
+                        print(f"{RED}checkpoint {checkpoint_name} saved{RESET}")
                     torch.cuda.empty_cache()
-                    
-                    print(f"step: {step}", "epoch: {epoch}")
+
+                    print(f"step: {step}", f"epoch: {epoch + 1}")
                     print(
                         f"val_loss {test_loss:.4f}",
                         f"val_post_acc: {test_acc:.4f}",
